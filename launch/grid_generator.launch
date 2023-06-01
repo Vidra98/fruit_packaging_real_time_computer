@@ -1,0 +1,22 @@
+<launch>
+    <arg name="publish_image" default="True"/>
+    <arg name="time_threshold" default="0.05"/>
+    <arg name="NumCellsx" default="6"/>
+    <arg name="NumCellsy" default="3.5"/>
+    <arg name="aruco_pose_topic" default="/aruco_simple/pose"/>
+    <arg name="aruco_pose2_topic" default="/aruco_simple/pose2"/>
+    <arg name="image_topic" default="/camera/color/image_raw"/>
+
+
+    <node name="grid_generator" pkg="fruit_packaging" type="grid_generator.py">
+        <param name="publish_image" value="$(arg publish_image)"/>
+        <param name="time_threshold" value="$(arg time_threshold)"/>
+        <param name="NumCellsx" value="$(arg NumCellsx)"/>
+        <param name="NumCellsy" value="$(arg NumCellsy)"/>
+        <param name="aruco_pose_topic" value="$(arg aruco_pose_topic)"/>
+        <param name="aruco_pose2_topic" value="$(arg aruco_pose2_topic)"/>
+        <param name="image_topic" value="$(arg image_topic)"/>
+
+    </node>
+    
+</launch>
