@@ -33,7 +33,7 @@ def show_camera_view(rgb, depth, segmap=None):
                 depth.max()).astype(np.uint8))
     cv2.waitKey(25)
 
-def depth2pc(depth, K, rgb=None):
+def depth2pc(depth, K, rgb=None, segmap=None):
     """
     Convert depth and intrinsics to point cloud and optionally point cloud color
     :param depth: hxw depth map in m
@@ -41,7 +41,11 @@ def depth2pc(depth, K, rgb=None):
     :returns: (Nx3 point cloud, point cloud color)
     """
 
-    mask = np.where(depth > 0)
+    if segmap is not None:
+        mask = np.where((depth > 0) & (segmap > 0))
+    else:
+        mask = np.where(depth > 0)
+
     x,y = mask[1], mask[0]
 
     normalized_x = (x.astype(np.float32) - K[0,2])

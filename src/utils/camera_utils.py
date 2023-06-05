@@ -13,7 +13,10 @@ class RealCameraROS:
     Class for using the realsense camera with rospy
     """
     def __init__(self):
-        rospy.init_node("python_node_camera_sub",anonymous=True)
+        try:
+            rospy.init_node("python_node",anonymous=True)
+        except:
+            print("rospy already initialized")
         try:
             self.camera_info = rospy.wait_for_message("/camera/color/camera_info", CameraInfo, timeout=0.5)
             self.depth_info = rospy.wait_for_message("/camera/aligned_depth_to_color/camera_info", CameraInfo, timeout=0.5)
@@ -61,7 +64,7 @@ class RealCameraROS:
 
         return cv2.applyColorMap(cv2.convertScaleAbs(depth_image.copy(), alpha=0.03), cv2.COLORMAP_JET)
 
-    def get_intrinsics(self):
+    def getIntrinsic(self):
         return np.array(self.camera_info.K).reshape((3,3)), np.array(self.depth_info.D)
     
     def get_pointcloud(self):

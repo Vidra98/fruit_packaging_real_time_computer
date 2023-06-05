@@ -6,7 +6,7 @@
     <arg name="aruco_pose_topic" default="/aruco_simple/pose"/>
     <arg name="aruco_pose2_topic" default="/aruco_simple/pose2"/>
     <arg name="image_topic" default="/camera/color/image_raw"/>
-
+    <arg name="camera_frame" default="camera_color_optical_frame"/>
 
     <node name="grid_generator" pkg="fruit_packaging" type="grid_generator.py">
         <param name="publish_image" value="$(arg publish_image)"/>
@@ -16,6 +16,7 @@
         <param name="aruco_pose_topic" value="$(arg aruco_pose_topic)"/>
         <param name="aruco_pose2_topic" value="$(arg aruco_pose2_topic)"/>
         <param name="image_topic" value="$(arg image_topic)"/>
+        <param name="camera_frame" value="$(arg camera_frame)"/>
 
     </node>
     

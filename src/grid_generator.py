@@ -11,6 +11,7 @@ from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image, CameraInfo
 from geometry_msgs.msg import Pose, PoseArray
 from std_msgs.msg import Bool, String
+from contact_grasp.srv import segmentationSrv, segmentationSrvResponse
 
 from sensor_msgs.msg import Image, CameraInfo
 
@@ -38,25 +39,14 @@ class GridGenerator:
 
         self.markers = {}
 
-    def publish_image(self, grid_np, grid_flag, pub_image):
-        image_msg_received = rospy.wait_for_message("/aruco_simple/result", Image, timeout=0.1)
-        image = self.bridge.imgmsg_to_cv2(image_msg_received, desired_encoding="passthrough")
- 
-        camera_info = rospy.wait_for_message("/camera/color/camera_info", CameraInfo, timeout=0.1)
-        intrinsic = np.array(camera_info.K).reshape((3, 3))
-        
-        grid_pxl = np.empty((grid_np.shape[0], grid_np.shape[1], 2))
-        for i in range(grid_np.shape[0]):
-            for j in range(grid_np.shape[1]):
-                xyw = intrinsic @ np.array(grid_np[i, j]["pos"])
-                grid_pxl[i, j] = xyw[:2]/xyw[2]
-                grid_pxl[i, j] = grid_pxl[i, j].astype(int)
+    def publish_image(self, grid_pxl, grid_flag, pub_image, image, intrinsic):
+
         # Plot grid on image
         image_plt = image.copy()
         for i in range(grid_pxl.shape[0]):
             for j in range(grid_pxl.shape[1]):
-                if grid_flag[i, j] == 1:
-                    cv2.circle(image_plt, (int(grid_pxl[i, j][0]), int(grid_pxl[i, j][1])), 5, (0, 0, 255), -1)
+                if grid_flag[i, j] != 0:
+                    cv2.circle(image_plt, (int(grid_pxl[i, j][0]), int(grid_pxl[i, j][1])), 5, (255, 0, 0), -1)
                 else:
                     cv2.circle(image_plt, (int(grid_pxl[i, j][0]), int(grid_pxl[i, j][1])), 5, (0, 255, 0), -1)
 
@@ -74,7 +64,10 @@ class GridGenerator:
         pub_image.publish(image_msg)
 
 
-    def generate_grid(self, args):
+    def generate_grid(self, args, image, intrinsic): 
+
+        parameter = args[3]
+
         marker_vector = self.markers["markerTop"]["pos"] - self.markers["markerOrigin"]["pos"]
 
         GridSize = self.rot_mat.T @ marker_vector
@@ -83,7 +76,7 @@ class GridGenerator:
         grid_flag = np.ones((int(self.NumCellsx), int(self.NumCellsy)), dtype=np.uint8)*255
 
         grid = PoseArray()
-        grid.header.frame_id = "camera_link"
+        grid.header.frame_id = parameter["camera_frame"]
         grid.header.stamp = rospy.Time.now()
 
         pose = Pose()
@@ -114,6 +107,31 @@ class GridGenerator:
                 rospy.loginfo(grid_np)
                 grid.poses.append(pose)
 
+        # Convert grid to pixel coordinates
+        grid_pxl = np.empty((grid_np.shape[0], grid_np.shape[1], 2))
+        for i in range(grid_np.shape[0]):
+            for j in range(grid_np.shape[1]):
+                xyw = intrinsic @ np.array(grid_np[i, j]["pos"])
+                grid_pxl[i, j] = xyw[:2]/xyw[2]
+                grid_pxl[i, j] = grid_pxl[i, j].astype(int)
+        
+        # convert img to ros msg
+        ros_img = self.bridge.cv2_to_imgmsg(image, encoding="bgr8")
+
+        try:
+            segmentation = rospy.ServiceProxy("segmentation", segmentationSrv)
+            resp = segmentation(ros_img)
+        except rospy.ServiceException as e:
+            rospy.logwarn(e)
+            return
+    
+        segmap = self.bridge.imgmsg_to_cv2(resp.image, desired_encoding="passthrough")
+
+        for i in range(grid_pxl.shape[0]):
+            for j in range(grid_pxl.shape[1]):
+                if segmap[int(grid_pxl[i, j][1]), int(grid_pxl[i, j][0])] != 0:
+                    grid_flag[i, j] = 0
+
         grid_flag[0, 0] = 0
         grid_flag[-1, -1] = 0
         
@@ -125,9 +143,8 @@ class GridGenerator:
         pub_DisposabilityGrid_msg = self.bridge.cv2_to_imgmsg(grid_flag, encoding="mono8")
         pub_DisposabilityGrid.publish(pub_DisposabilityGrid_msg)
         
-        parameter = args[3]
         if parameter["publish_image"]:
-            self.publish_image(grid_np, grid_flag, pub_img)
+            self.publish_image(grid_pxl, grid_flag, pub_img, image, intrinsic)
 
     def markerOrigin_callback(self, pose, args):
         self.markerOrigin_received_time = time.time()
@@ -139,6 +156,13 @@ class GridGenerator:
             self.markerTop_pos = None
             return
         
+        # retrieve image 
+        image_msg_received = rospy.wait_for_message("/aruco_simple/result", Image, timeout=0.25)
+        image = self.bridge.imgmsg_to_cv2(image_msg_received, desired_encoding="passthrough")
+ 
+        camera_info = rospy.wait_for_message("/camera/color/camera_info", CameraInfo, timeout=0.25)
+        intrinsic = np.array(camera_info.K).reshape((3, 3))
+
         self.markerOrigin_pos = np.array([pose.position.x, pose.position.y, pose.position.z])
         self.markers = {"markerOrigin": {"pos": self.markerOrigin_pos},
                         "markerTop": {"pos": self.markerTop_pos}}
@@ -148,7 +172,7 @@ class GridGenerator:
 
         self.rot_mat = (self.markerOrigin_mat + self.markerTop_mat) / 2
 
-        self.generate_grid(args)
+        self.generate_grid(args, image, intrinsic)
 
     def markerTop_callback(self, pose):
         self.markerTop_received_time = time.time()
@@ -162,9 +186,10 @@ if __name__ == '__main__':
 
     node_name = "grid_generator"
     rospy.init_node(node_name)
-    pub_PoseArray = rospy.Publisher(node_name+'/Posearray_pub', PoseArray, queue_size=2)
-    pub_img = rospy.Publisher(node_name+'/result', Image, queue_size=2)
-    pub_DisposabilityGrid = rospy.Publisher(node_name+'/disposability_grid', Image, queue_size=2)
+
+    pub_PoseArray = rospy.Publisher(node_name+'/Posearray_pub', PoseArray, queue_size=1)
+    pub_img = rospy.Publisher(node_name+'/result', Image, queue_size=1)
+    pub_DisposabilityGrid = rospy.Publisher(node_name+'/disposability_grid', Image, queue_size=1)
 
     rospy.Subscriber(parameter["aruco_pose_topic"], Pose, gridGen.markerOrigin_callback, callback_args=[pub_PoseArray, pub_img, pub_DisposabilityGrid, parameter], queue_size=1)
     rospy.Subscriber(parameter["aruco_pose2_topic"], Pose, gridGen.markerTop_callback, queue_size=1)
