@@ -88,12 +88,14 @@ class iLQR():
         if final_orn is not None and final_pos is not None:
             pos_dif = final_pos - x_pos[-1, :3]
             pos_dif = np.linalg.norm(pos_dif)
-            orn_dif = quat_distance(convert_quat(final_orn, to="xyzw"), x_pos[-1, 3:])
+            orn_dif = quat_distance(final_orn, x_pos[-1, 3:])
             if pos_dif > 0.01:
                 print("WARNING: final position not reached")
                 print(f"pos_dif:{pos_dif}")
 
-        return jpos, x_pos, U, Ks, ds, pos_dif, orn_dif
+            return jpos, x_pos, U, Ks, ds, pos_dif, orn_dif
+        
+        return jpos, x_pos, U, Ks, ds
 
     def grasping_trajectory(self, q0, dq0, grasps_pos_base, grasps_orn_wxyz, horizon = 120,
                            pos_threshold = 0.01, orn_threshold = 0.1, max_iter = 3):
@@ -126,20 +128,20 @@ class iLQR():
         pos_dif = 1000
         iter = 0
         while pos_dif > pos_threshold and iter < max_iter:
-            jpos, x_pos, U, Ks, ds, pos_dif, orn_dif = self.generate_trajectory(q0, dq0, keypoints, horizon)
+            jpos, x_pos, U, Ks, ds, pos_dif, orn_dif = self.generate_trajectory(q0, dq0, keypoints, horizon, final_pos = target2_pos_base, final_orn = target2_orn)
             iter += 1
             horizon = int(1.5*horizon)
 
         return jpos, x_pos, U, Ks, ds, pos_dif, orn_dif
     
     def dispose_trajectory(self, q0, dq0, grasp_pos, grasp_orn, dispose_pos, dispose_orn, horizon = 120,
-                           pos_threshold = 0.01, orn_threshold = 0.1, max_iter = 3):
+                           pos_threshold = 0.03, orn_threshold = 0.1, max_iter = 3):
         """ 
         dispose quat (wxyz)
         """
         Qtarget1 = np.diag([.2, .2, 1, .7, .7, .7])
         Qtarget2 = np.diag([.5, .5, 1, .1, .1, .1])
-        Qtarget3 = np.diag([.7, .7, .7, 1, 1, 1])
+        Qtarget3 = np.diag([1, 1, 1, 0.71, .71, .71])
 
         target1_orn = grasp_orn.copy()
         rotation1_mat_grasps = quat2mat(convert_quat(target1_orn, to="xyzw"))
@@ -165,7 +167,8 @@ class iLQR():
         pos_dif = 1000
         iter = 0
         while pos_dif > pos_threshold and iter < max_iter:
-            jpos, x_pos, U, Ks, ds, pos_dif, orn_dif = self.generate_trajectory(q0, dq0, keypoints, horizon, cmd_penalties = 1e-3)
+            print(pos_dif)
+            jpos, x_pos, U, Ks, ds, pos_dif, orn_dif = self.generate_trajectory(q0, dq0, keypoints, horizon, cmd_penalties = 1e-3, final_pos = target3_pos_base, final_orn = target3_orn)
             iter += 1
             horizon = int(1.5*horizon)
 
@@ -186,7 +189,7 @@ class iLQR():
         pos_dif = 1000
         iter = 0
         while pos_dif > pos_threshold and iter < max_iter:
-            jpos, x_pos, U, Ks, ds, pos_dif, orn_dif = self.generate_trajectory(q0, dq0, keypoints, horizon)
+            jpos, x_pos, U, Ks, ds, pos_dif, orn_dif = self.generate_trajectory(q0, dq0, keypoints, horizon, final_pos = target1_pos_base, final_orn = target1_orn)
             iter += 1
             horizon = int(1.5*horizon)
 

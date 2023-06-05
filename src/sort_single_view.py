@@ -19,7 +19,7 @@ from scipy.spatial.transform import Rotation
 from contact_grasp.srv import *
 from cv_bridge import CvBridge, CvBridgeError
 
-sys.path.append("/home/vdrame/catkin_ws/src/py_panda/PyPanda")
+# sys.path.append("/home/vdrame/catkin_ws/src/py_panda/PyPanda")
 from PyPanda import Robot
 import rospy
 from PyPanda import Utils
