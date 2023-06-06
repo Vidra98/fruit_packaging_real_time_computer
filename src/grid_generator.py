@@ -93,7 +93,7 @@ class GridGenerator:
 
         for x in range(int(self.NumCellsx)):
             for y in range(int(self.NumCellsy)):
-                if x%2 is not 0:
+                if x%2 != 0:
                     offset = 0.5
                 else:
                     offset = 0
