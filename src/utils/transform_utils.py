@@ -239,17 +239,36 @@ def depth2pc(depth, K, rgb=None):
     pc = np.vstack((world_x, world_y, world_z)).T
     return (pc, rgb)
 
-def regularize_pc(pc, pc_colors, method="Voxel", n_points=10000, voxel_size=0.005):
-    """ Regularize point cloud by either voxel downsampling or random sampling"""
-    if method == "voxel":
+def regularize_pc(pc, pc_colors, downsampling_method="voxel", n_points=10000, voxel_size=0.005, 
+                  outlier_filtering_method="radius", statistical_param_arg=[5, 1.0], radius_param_arg=[12, 0.015]):
+    """Regularize point cloud by downsampling and filtering
+
+    Args:
+        pc (array): input point cloud
+        pc_colors (array): input point cloud colors
+        downsampling_method (str, optional): downsampling method in ["voxel", random] . Defaults to "voxel".
+        n_points (int, optional): nb of point to downsample to. Defaults to 10000.
+        voxel_size (float, optional): voxel size for downsampling. point are averaged in voxel area. Defaults to 0.005.
+        filtering_method (str, optional): Filtering method in ["statistical", "radius"]  . Defaults to "radius".
+        statistical_param_arg (, optional): [nb_neighbors, std_ratio]. Defaults to [5, 1.0].
+        radius_param_arg (, optional): [nb_points, radius]. Defaults to [12, 0.015].
+        For more info, refer to http://www.open3d.org/docs/latest/tutorial/Advanced/pointcloud_outlier_removal.html
+
+    Returns:
+        pc (array): regularized point cloud
+        pc_colors (array): regularized point cloud colors
+    """
+    pcd = None
+    import time
+    start = time.time()
+    if downsampling_method == "voxel":
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(pc)
         pcd.colors = o3d.utility.Vector3dVector(pc_colors)
         pcd = pcd.voxel_down_sample(voxel_size=voxel_size)
         pc = np.asarray(pcd.points)
         pc_colors = np.asarray(pcd.colors)
-
-    elif method == "random":
+    elif downsampling_method == "random":
         if pc.shape[0] > n_points:
             idx = np.random.choice(pc.shape[0], n_points, replace=False)
             pc = pc[idx]
@@ -257,8 +276,23 @@ def regularize_pc(pc, pc_colors, method="Voxel", n_points=10000, voxel_size=0.00
         else:
             print("Warning: pc has less than {} points".format(n_points))
     else:
-        print("Error: method {} not implemented, please chose between [voxel, random]".format(method))
-
+        print("Error: method {} not implemented, please chose between [voxel, random]".format(downsampling_method))
+    downsampling_time = time.time()
+    if outlier_filtering_method is not None:
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(pc)
+        pcd.colors = o3d.utility.Vector3dVector(pc_colors)
+        if outlier_filtering_method == "statistical":
+            cl, ind = pcd.remove_statistical_outlier(nb_neighbors=statistical_param_arg[0], std_ratio=statistical_param_arg[1])
+        if outlier_filtering_method == "radius":
+            cl, ind = pcd.remove_radius_outlier(nb_points=radius_param_arg[0], radius=radius_param_arg[1])
+        else:
+            print("Error: method {} not implemented, please chose between [statistical, radius]".format(filtering_method))
+        pc = np.asarray(cl.points)
+        pc_colors = np.asarray(cl.colors)
+    filtering_time = time.time()
+    print("Downsampling time: {}s, Filtering time: {}s".format(downsampling_time - start, filtering_time - downsampling_time))
+    
     return pc, pc_colors
 
 def add_view2pc(pc, pc_colors, main_view_pose, camera_pose, new_pc=None, new_pc_colors=None,
@@ -300,6 +334,25 @@ def add_view2pc(pc, pc_colors, main_view_pose, camera_pose, new_pc=None, new_pc_
         fused_pc_colors = new_pc_colors
 
     if regularize:
-        fused_pc, fused_pc_colors = regularize_pc(fused_pc, fused_pc_colors, method="voxel", voxel_size=voxel_size)
+        fused_pc, fused_pc_colors = regularize_pc(fused_pc, fused_pc_colors, downsampling_method="voxel", voxel_size=voxel_size)
 
     return fused_pc, fused_pc_colors
+
+def correct_angle(quat_xyzw, angle_range):
+    """ if angle outside of range, rotate by 180 degrees
+
+    Args:
+        quat_xyzw (array): quaternion of the gripper
+        angle_range (array): range of the angle
+
+    Returns:
+        _type_: _description_
+    """
+    angle_range = [-140, 40]
+    angle_euler = Rotation.from_quat(quat_xyzw).as_euler("XYZ", degrees=True)
+    if angle_euler[2] < min(angle_range) or angle_euler[2] > max(angle_range):
+        print("Readjuested angle")
+        rot_orn=np.array([0, 0, -1, 0])
+        quat_xyzw = quat_multiply(quat_xyzw, rot_orn)
+
+    return quat_xyzw
