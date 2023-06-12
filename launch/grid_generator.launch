@@ -1,8 +1,8 @@
 <launch>
     <arg name="publish_image" default="True"/>
     <arg name="time_threshold" default="0.05"/>
-    <arg name="NumCellsx" default="6"/>
-    <arg name="NumCellsy" default="3.5"/>
+    <arg name="NumCellsx" default="4"/>
+    <arg name="NumCellsy" default="5.5"/>
     <arg name="aruco_pose_topic" default="/aruco_simple/pose"/>
     <arg name="aruco_pose2_topic" default="/aruco_simple/pose2"/>
     <arg name="image_topic" default="/camera/color/image_raw"/>

@@ -39,7 +39,7 @@ class GridGenerator:
 
         self.markers = {}
 
-    def publish_image(self, grid_pxl, grid_flag, pub_image, image, intrinsic):
+    def publish_image(self, grid_pxl, grid_flag, pub_image, image, intrinsic, time_stamp=None, parameter=None):
 
         # Plot grid on image
         image_plt = image.copy()
@@ -61,8 +61,14 @@ class GridGenerator:
         cv2.circle(image_plt, (int(marker29_pxl[0]), int(marker29_pxl[1])), 6, (255, 0, 0), 2)
 
         image_msg = self.bridge.cv2_to_imgmsg(image_plt, encoding="rgb8")
-        pub_image.publish(image_msg)
+        image_msg.header.frame_id = parameter["camera_frame"]
 
+        if time_stamp is None:
+            image_msg.header.stamp = rospy.Time.now()
+        else:
+            image_msg.header.stamp = time_stamp
+        
+        pub_image.publish(image_msg)
 
     def generate_grid(self, args, image, intrinsic): 
 
@@ -75,14 +81,15 @@ class GridGenerator:
         grid_np = np.empty((int(self.NumCellsx), int(self.NumCellsy)), dtype=dict)
         grid_flag = np.ones((int(self.NumCellsx), int(self.NumCellsy)), dtype=np.uint8)*255
 
+        time_stamp = rospy.Time.now()
         grid = PoseArray()
         grid.header.frame_id = parameter["camera_frame"]
-        grid.header.stamp = rospy.Time.now()
+        grid.header.stamp = time_stamp
 
-        pose = Pose()
-        pose.position.x, pose.position.y, pose.position.z = self.markers["markerOrigin"]["pos"][0], self.markers["markerOrigin"]["pos"][1], self.markers["markerOrigin"]["pos"][2]
-        pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w = 0, 0, 0, 1
-        grid.poses.append(pose)
+        # pose = Pose()
+        # pose.position.x, pose.position.y, pose.position.z = self.markers["markerOrigin"]["pos"][0], self.markers["markerOrigin"]["pos"][1], self.markers["markerOrigin"]["pos"][2]
+        # pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w = 0, 0, 0, 1
+        # grid.poses.append(pose)
 
         grid_np[0, 0] = {"pos": self.markers["markerOrigin"]["pos"]}
         # grid_flag[0, 0] = 0
@@ -104,7 +111,6 @@ class GridGenerator:
                 pose = Pose()
                 pose.position.x, pose.position.y, pose.position.z = cell_pos[0], cell_pos[1], cell_pos[2]
                 pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w = 0, 0, 0, 1
-                rospy.loginfo(grid_np)
                 grid.poses.append(pose)
 
         # Convert grid to pixel coordinates
@@ -118,6 +124,9 @@ class GridGenerator:
         # convert img to ros msg
         ros_img = self.bridge.cv2_to_imgmsg(image, encoding="bgr8")
 
+        # image dimentions
+        img_height, img_width = image.shape[:2]
+
         try:
             segmentation = rospy.ServiceProxy("segmentation", segmentationSrv)
             resp = segmentation(ros_img)
@@ -129,6 +138,9 @@ class GridGenerator:
 
         for i in range(grid_pxl.shape[0]):
             for j in range(grid_pxl.shape[1]):
+                if grid_pxl[i, j][0] < 0 or grid_pxl[i, j][0] >= img_width or grid_pxl[i, j][1] < 0 or grid_pxl[i, j][1] >= img_height:
+                    grid_flag[i, j] = 0
+                    continue
                 if segmap[int(grid_pxl[i, j][1]), int(grid_pxl[i, j][0])] != 0:
                     grid_flag[i, j] = 0
 
@@ -141,10 +153,16 @@ class GridGenerator:
 
         pub_PoseArray.publish(grid)
         pub_DisposabilityGrid_msg = self.bridge.cv2_to_imgmsg(grid_flag, encoding="mono8")
+        pub_DisposabilityGrid_msg.header.frame_id = parameter["camera_frame"]
+        pub_DisposabilityGrid_msg.header.stamp = time_stamp
         pub_DisposabilityGrid.publish(pub_DisposabilityGrid_msg)
         
         if parameter["publish_image"]:
-            self.publish_image(grid_pxl, grid_flag, pub_img, image, intrinsic)
+            segmap = np.where(segmap == 0, 0, 255)
+            img_seg = 0.7*image
+            img_seg[:, :, 2] = img_seg[:, :, 2] + 0.3*segmap
+            img_seg = img_seg.astype(np.uint8)
+            self.publish_image(grid_pxl, grid_flag, pub_img, img_seg, intrinsic, time_stamp=time_stamp, parameter=parameter)
 
     def markerOrigin_callback(self, pose, args):
         self.markerOrigin_received_time = time.time()

@@ -1,0 +1,277 @@
+<?xml version="1.0" ?>
+<launch>
+    <arg name="robot_ip" />
+    <arg name="load_gripper" default="true" />
+    <arg name="load_bota" default="false" />
+    <arg name="bota_name" default="ft_sensor0" />
+    <arg name="bota_interface" default="enp3s0f1" />
+    <arg name="rviz" default="true" />
+    <arg name="arm_id" default="panda" />
+    <arg name="stop_at_shutdown" default="true" />
+    <param name="robot_description" command="$(find xacro)/xacro --inorder '$(find py_panda)/description/robots/panda_single.xacro' arm_id:=$(arg arm_id) load_gripper:=$(arg load_gripper) load_bota:=$(arg load_bota) bota_name:=$(arg bota_name)" />
+
+    <arg name="marker_size"  default="0.12" doc="Size of the ArUco marker used, in meters" />
+    <arg name="marker_id" default="30" doc="The ID of the ArUco marker used" />
+
+    <group if="$(arg load_gripper)">
+        <arg name="joint_names" default="[$(arg arm_id)_finger_joint1, $(arg arm_id)_finger_joint2]" />    
+        <node name="franka_gripper" pkg="franka_gripper" type="franka_gripper_node" ns="$(arg arm_id)" output="screen">
+            <param name="robot_ip" value="$(arg robot_ip)"/>
+            <param name="stop_at_shutdown" value="$(arg stop_at_shutdown)" />
+            <rosparam command="load" file="$(find franka_gripper)/config/franka_gripper_node.yaml" />
+            <rosparam param="joint_names" subst_value="true">$(arg joint_names)</rosparam>
+        </node>        
+    </group>
+
+    <node name="franka_control" pkg="franka_control" type="franka_control_node" ns="$(arg arm_id)" output="screen" required="true">
+        <rosparam command="load" subst_value="True" file="$(find py_panda)/config/franka_control_node.yaml" />
+        <param name="arm_id" value="$(arg arm_id)"/>
+        <param name="robot_ip" value="$(arg robot_ip)" />
+    </node>
+    
+    <group if="$(arg load_bota)">
+        <param name="bota_name" value="$(arg bota_name)"/>
+        <node name="bus0" pkg="rokubimini_ethercat" type="rokubimini_ethercat_bus_manager_node"  output="screen" launch-prefix="ethercat_grant" required="true">
+            <param name="num_spinners"                              type="int"      value="1"/>
+        <!--    The time_step parameter sets the ROS publishing frequency, not the sensor update rate -->
+        <!--    If no time_step is set, the topic is published with the frequency of the sensor. -->
+        <!--    <param name="time_step"                                 type="double"   value="0.01"/> -->
+            <param name="ethercat_bus"  type="string"   value="$(arg bota_interface)"/>
+            <param name="rokubiminis/$(arg bota_name)/name" type="string" value="$(arg bota_name)"/>
+            <param name="rokubiminis/$(arg bota_name)/product_name" type="string" value="BFT-SENS-ECAT-M8"/>
+            <rosparam ns="rokubiminis/$(arg bota_name)" command="load" file="$(find py_panda)/config/bota_calib.yaml" />
+            <param name="rokubiminis/$(arg bota_name)/ethercat_address" type="int"   value="1"/>
+        </node>
+
+        <node name="ft_compensate" pkg="gravity_compensation" type="gravity_compensation_node" cwd="node" respawn="false" output="screen">
+            <rosparam command="load" file="$(find py_panda)/config/panda_hand_bota_ft_calib_data.yaml"/>
+            <remap from="ft_compensate/ft_raw" to="/bus0/ft_sensor0/ft_sensor_readings/wrench" />
+            <remap from="ft_compensate/imu" to="/bus0/ft_sensor0/ft_sensor_readings/imu" />
+            <param name="loop_rate" value="100" />
+            <param name="ns" value="/ft_sensor"/>
+            <param name="invert_axis" value="true" />
+            <param name="gripper_com_child_frame_id" value="$(arg arm_id)_hand_com"/> 
+        </node>
+    
+    </group>
+
+    <rosparam subst_value="True" file="$(find py_panda)/config/single_arm_controllers.yaml" command="load"/>
+
+     <node 
+        name="controller_spawner" 
+        pkg="controller_manager" 
+        type="controller_manager" 
+        respawn="false"
+        output="screen" 
+        args="spawn franka_state_controller"
+        ns="$(arg arm_id)">
+    </node>
+
+    <node 
+        name="controller_spawner_stopped" 
+        pkg="controller_manager" 
+        type="controller_manager" 
+        respawn="false"
+        output="screen" 
+        args="load joint_impedance_controller joint_torque_controller joint_velocity_controller joint_position_controller cartesian_velocity_controller cartesian_force_controller cartesian_impedance_controller nullspace_cartesian_impedance_controller"
+        ns="$(arg arm_id)">
+    </node>
+    
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" output="screen" ns="$(arg arm_id)">
+        <param name="robot_description" command="$(find xacro)/xacro --inorder '$(find py_panda)/description/robots/panda_arm_hand.urdf.xacro'" if="$(arg load_gripper)" />
+        <param name="robot_description" command="$(find xacro)/xacro --inorder '$(find py_panda)/description/robots/panda_arm.urdf.xacro'" unless="$(arg load_gripper)" />
+    </node>
+    <node name="joint_state_publisher" type="joint_state_publisher" pkg="joint_state_publisher" output="screen" ns="$(arg arm_id)">
+        <param name="robot_description" command="$(find xacro)/xacro --inorder '$(find py_panda)/description/robots/panda_arm_hand.urdf.xacro' arm_id:=$(arg arm_id)" if="$(arg load_gripper)" />
+        <param name="robot_description" command="$(find xacro)/xacro --inorder '$(find py_panda)/description/robots/panda_arm.urdf.xacro' arm_id:=$(arg arm_id)" unless="$(arg load_gripper)" />
+        <rosparam if="$(arg load_gripper)" param="source_list">[franka_state_controller/joint_states, franka_gripper/joint_states] </rosparam>
+        <rosparam unless="$(arg load_gripper)" param="source_list">[franka_state_controller/joint_states] </rosparam>
+        <param name="rate" value="30"/>
+    </node>
+
+
+
+         <!-- Camera parameters -->
+    <arg name="serial_no"           default=""/>
+    <arg name="usb_port_id"         default=""/>
+    <arg name="device_type"         default=""/>
+    <arg name="json_file_path"      default=""/>
+    <arg name="camera"              default="camera"/>
+    <arg name="tf_prefix"           default="$(arg camera)"/>
+    <arg name="external_manager"    default="false"/>
+    <arg name="manager"             default="realsense2_camera_manager"/>
+    <arg name="output"              default="screen"/>
+    <arg name="respawn"              default="false"/>
+
+    <arg name="fisheye_width"       default="-1"/>
+    <arg name="fisheye_height"      default="-1"/>
+    <arg name="enable_fisheye"      default="false"/>
+
+    <arg name="depth_width"         default="640"/>
+    <arg name="depth_height"        default="480"/>
+    <arg name="enable_depth"        default="true"/>
+
+    <arg name="confidence_width"    default="-1"/>
+    <arg name="confidence_height"   default="-1"/>
+    <arg name="enable_confidence"   default="true"/>
+    <arg name="confidence_fps"      default="-1"/>
+
+    <arg name="infra_width"         default="848"/>
+    <arg name="infra_height"        default="480"/>
+    <arg name="enable_infra"        default="false"/>
+    <arg name="enable_infra1"       default="false"/>
+    <arg name="enable_infra2"       default="false"/>
+    <arg name="infra_rgb"           default="false"/>
+
+    <arg name="color_width"         default="640"/>
+    <arg name="color_height"        default="480"/>
+    <arg name="enable_color"        default="true"/>
+
+    <arg name="fisheye_fps"         default="-1"/>
+    <arg name="depth_fps"           default="-1"/>
+    <arg name="infra_fps"           default="30"/>
+    <arg name="color_fps"           default="-1"/>
+    <arg name="gyro_fps"            default="-1"/>
+    <arg name="accel_fps"           default="-1"/>
+    <arg name="enable_gyro"         default="false"/>
+    <arg name="enable_accel"        default="false"/>
+
+    <arg name="enable_pointcloud"         default="true"/>
+    <arg name="pointcloud_texture_stream" default="RS2_STREAM_COLOR"/>
+    <arg name="pointcloud_texture_index"  default="0"/>
+    <arg name="allow_no_texture_points"   default="false"/>
+    <arg name="ordered_pc"                default="false"/>
+
+    <arg name="enable_sync"               default="false"/>
+    <arg name="align_depth"               default="true"/>
+
+    <arg name="publish_tf"                default="true"/>
+    <arg name="tf_publish_rate"           default="0"/>
+
+    <arg name="filters"                   default=""/>
+    <arg name="clip_distance"             default="-2"/>
+    <arg name="linear_accel_cov"          default="0.01"/>
+    <arg name="initial_reset"             default="false"/>
+    <arg name="reconnect_timeout"         default="6.0"/>
+    <arg name="wait_for_device_timeout"   default="-1.0"/>
+    <arg name="unite_imu_method"          default=""/>
+    <arg name="topic_odom_in"             default="odom_in"/>
+    <arg name="calib_odom_file"           default=""/>
+    <arg name="publish_odom_tf"           default="true"/>
+
+    <arg name="stereo_module/exposure/1"  default="7500"/>
+    <arg name="stereo_module/gain/1"      default="16"/>
+    <arg name="stereo_module/exposure/2"  default="7500"/>
+    <arg name="stereo_module/gain/2"      default="16"/>
+
+    <group ns="$(arg camera)">
+        <include file="$(find realsense2_camera)/launch/includes/nodelet.launch.xml">
+        <arg name="tf_prefix"                value="$(arg tf_prefix)"/>
+        <arg name="external_manager"         value="$(arg external_manager)"/>
+        <arg name="manager"                  value="$(arg manager)"/>
+        <arg name="output"                   value="$(arg output)"/>
+        <arg name="respawn"                  value="$(arg respawn)"/>
+        <arg name="serial_no"                value="$(arg serial_no)"/>
+        <arg name="usb_port_id"              value="$(arg usb_port_id)"/>
+        <arg name="device_type"              value="$(arg device_type)"/>
+        <arg name="json_file_path"           value="$(arg json_file_path)"/>
+
+        <arg name="enable_pointcloud"        value="$(arg enable_pointcloud)"/>
+        <arg name="pointcloud_texture_stream" value="$(arg pointcloud_texture_stream)"/>
+        <arg name="pointcloud_texture_index"  value="$(arg pointcloud_texture_index)"/>
+        <arg name="enable_sync"              value="$(arg enable_sync)"/>
+        <arg name="align_depth"              value="$(arg align_depth)"/>
+
+        <arg name="fisheye_width"            value="$(arg fisheye_width)"/>
+        <arg name="fisheye_height"           value="$(arg fisheye_height)"/>
+        <arg name="enable_fisheye"           value="$(arg enable_fisheye)"/>
+
+        <arg name="depth_width"              value="$(arg depth_width)"/>
+        <arg name="depth_height"             value="$(arg depth_height)"/>
+        <arg name="enable_depth"             value="$(arg enable_depth)"/>
+
+        <arg name="confidence_width"         value="$(arg confidence_width)"/>
+        <arg name="confidence_height"        value="$(arg confidence_height)"/>
+        <arg name="enable_confidence"        value="$(arg enable_confidence)"/>
+        <arg name="confidence_fps"           value="$(arg confidence_fps)"/>
+
+        <arg name="color_width"              value="$(arg color_width)"/>
+        <arg name="color_height"             value="$(arg color_height)"/>
+        <arg name="enable_color"             value="$(arg enable_color)"/>
+
+        <arg name="infra_width"              value="$(arg infra_width)"/>
+        <arg name="infra_height"             value="$(arg infra_height)"/>
+        <arg name="enable_infra"             value="$(arg enable_infra)"/>
+        <arg name="enable_infra1"            value="$(arg enable_infra1)"/>
+        <arg name="enable_infra2"            value="$(arg enable_infra2)"/>
+        <arg name="infra_rgb"                value="$(arg infra_rgb)"/>
+
+        <arg name="fisheye_fps"              value="$(arg fisheye_fps)"/>
+        <arg name="depth_fps"                value="$(arg depth_fps)"/>
+        <arg name="infra_fps"                value="$(arg infra_fps)"/>
+        <arg name="color_fps"                value="$(arg color_fps)"/>
+        <arg name="gyro_fps"                 value="$(arg gyro_fps)"/>
+        <arg name="accel_fps"                value="$(arg accel_fps)"/>
+        <arg name="enable_gyro"              value="$(arg enable_gyro)"/>
+        <arg name="enable_accel"             value="$(arg enable_accel)"/>
+
+        <arg name="publish_tf"               value="$(arg publish_tf)"/>
+        <arg name="tf_publish_rate"          value="$(arg tf_publish_rate)"/>
+
+        <arg name="filters"                  value="$(arg filters)"/>
+        <arg name="clip_distance"            value="$(arg clip_distance)"/>
+        <arg name="linear_accel_cov"         value="$(arg linear_accel_cov)"/>
+        <arg name="initial_reset"            value="$(arg initial_reset)"/>
+        <arg name="reconnect_timeout"        value="$(arg reconnect_timeout)"/>
+        <arg name="wait_for_device_timeout"  value="$(arg wait_for_device_timeout)"/>
+        <arg name="unite_imu_method"         value="$(arg unite_imu_method)"/>
+        <arg name="topic_odom_in"            value="$(arg topic_odom_in)"/>
+        <arg name="calib_odom_file"          value="$(arg calib_odom_file)"/>
+        <arg name="publish_odom_tf"          value="$(arg publish_odom_tf)"/>
+        <arg name="stereo_module/exposure/1" value="$(arg stereo_module/exposure/1)"/>
+        <arg name="stereo_module/gain/1"     value="$(arg stereo_module/gain/1)"/>
+        <arg name="stereo_module/exposure/2" value="$(arg stereo_module/exposure/2)"/>
+        <arg name="stereo_module/gain/2"     value="$(arg stereo_module/gain/2)"/>
+
+        <arg name="allow_no_texture_points"  value="$(arg allow_no_texture_points)"/>
+        <arg name="ordered_pc"               value="$(arg ordered_pc)"/>
+        
+        </include>
+    </group>
+
+    <!-- Aruco Parameters -->
+    <arg name="marker1Id"         default="29"/>
+    <arg name="marker2Id"         default="26"/>
+    <arg name="markerSize"      default="0.04"/>    <!-- in m -->
+    <arg name="marker_frame"    default="aruco_marker_frame"/>
+    <arg name="ref_frame"       default=""/>  <!-- leave empty and the pose will be published wrt param parent_name -->
+    <arg name="corner_refinement" default="LINES" /> <!-- NONE, HARRIS, LINES, SUBPIX -->
+    <arg name="camera_frame" default="camera_color_optical_frame" />
+    <arg name="marker1_frame"     default="marker_topLeft" />
+    <arg name="marker2_frame"     default="marker_bottomRight" />
+    <arg name="dct_normalization" default="False" />
+    <arg name="dct_filter_size"   default="1" />
+
+    <node pkg="aruco_ros" type="double" name="aruco_simple">
+        <remap from="/camera_info" to="/camera/color/camera_info" />
+        <remap from="/image" to="/camera/color/image_raw" />
+        <param name="image_is_rectified" value="True"/>
+        <param name="marker_size"        value="$(arg markerSize)"/>
+        <param name="marker_id1" value="$(arg marker1Id)"/>
+        <param name="marker_id2" value="$(arg marker2Id)"/>
+        <param name="reference_frame"    value="$(arg ref_frame)"/>
+        <param name="camera_frame"       value="$(arg camera_frame)"/>
+        <param name="marker_frame"       value="$(arg marker_frame)" />
+        <param name="corner_refinement"  value="$(arg corner_refinement)" />
+        <param name="parent_name" value="$(arg camera_frame)"/>
+        <param name="child_name1" value="$(arg marker1_frame)" />
+        <param name="child_name2" value="$(arg marker2_frame)" />
+        <param name="normalizeImage" value="$(arg dct_normalization)"/>
+        <param name="dct_components_to_remove" value="$(arg dct_filter_size)"/>
+    </node>
+
+    <node pkg="rviz" type="rviz" output="screen" name="rviz" if="$(arg rviz)" args="-d $(find py_panda)/launch/single_robot.rviz -f world"/>
+    <!-- Fixed camera -->
+    <node pkg="tf" type="static_transform_publisher" name="panda_base_to_camera2" args="0.04911211 -0.0331901   0.07007729 0.71081385 -0.00487722  0.70335828 -0.00264716 panda_hand camera_link 1" /> 
+
+</launch>
