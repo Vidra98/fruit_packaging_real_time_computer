@@ -86,16 +86,20 @@ def get_camera_pose(rbt, ee_depth=-0.1034):
     return current_pose
 
 class gridRegistrator():
-    def __init__(self):
+    def __init__(self, rbt):
         self.bridge = CvBridge()
         self.poses = None
         self.disposability_grid = None
         self.registration_time = None
+        #rbt object, use to get pos of ee when grid is received
+        self.rbt = rbt 
+        self.acq_pos = None
 
     def callback(self, poseArray, disposability_grid_msg):
         self.poses = poseArray.poses
         self.disposability_grid = self.bridge.imgmsg_to_cv2(disposability_grid_msg, "mono8")
         self.registration_time = time.time()
+        self.acq_pos = get_camera_pose(self.rbt, ee_depth=-0.1150)
 
     def get_poses(self):
         return self.poses
@@ -124,6 +128,7 @@ class gridRegistrator():
             return None, None
         
         poses_reshaped = np.reshape(self.poses, np.shape(self.disposability_grid))
-        posesFree = poses_reshaped[self.freeCells[0, 0], self.freeCells[0, 1]]
-
-        return posesFree, self.freeCells[0]
+        poseFree = poses_reshaped[self.freeCells[0, 0], self.freeCells[0, 1]]
+        posFree = poseFree.position
+        posFree_np = self.acq_pos @ np.array([posFree.x, posFree.y, posFree.z, 1])
+        return posFree_np[:3], (self.freeCells[0, 0], self.freeCells[0, 1])

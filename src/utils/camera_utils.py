@@ -36,7 +36,7 @@ class RealCameraROS:
         """
         bridge = CvBridge()
         img_data = rospy.wait_for_message("/camera/color/image_raw", Image, timeout=0.5)
-        cv_image = bridge.imgmsg_to_cv2(img_data, "bgr8")
+        cv_image = bridge.imgmsg_to_cv2(img_data, "passthrough")
 
         if (self.camera_info.height, self.camera_info.width) != (self.depth_info.height, self.depth_info.width):
                 cv_image = cv2.resize(cv_image, dsize=(self.depth_info.height, self.depth_info.width), interpolation=cv2.INTER_AREA)

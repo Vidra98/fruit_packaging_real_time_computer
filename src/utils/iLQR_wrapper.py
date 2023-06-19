@@ -5,7 +5,7 @@ from PyLQR.utils import primitives, PythonCallbackMessage
 import numpy as np
 from utils.transform_utils import *
 import matplotlib.pyplot as plt
-
+from mpl_toolkits.mplot3d import Axes3D # <--- This is important for 3d plotting 
 
 class iLQR():
     def __init__(self, rbt):
@@ -92,8 +92,7 @@ class iLQR():
             pos_dif = np.linalg.norm(pos_dif)
             orn_dif = quat_distance(final_orn, x_pos[-1, 3:])
             if pos_dif > 0.01:
-                print("WARNING: final position not reached")
-                print(f"pos_dif:{pos_dif}")
+                print("WARNING: final position not reached, position difference is {}".format(pos_dif))
 
             return jpos, x_pos, U, Ks, ds, pos_dif, orn_dif
         
@@ -156,7 +155,7 @@ class iLQR():
         rotation2_mat_grasps = quat2mat(convert_quat(target2_orn, to="xyzw"))
         target2_pos_base = dispose_pos.copy()
         target2_pos_base -= rotation2_mat_grasps[:3,2] * 0.15 #rbt.get_ee_pos()[2].copy()
-        target2_discrete_time = horizon - 20 - 1
+        target2_discrete_time = horizon - 15 - 1
         keypoint_2 = PosOrnKeypoint(target2_pos_base, target2_orn, Qtarget2, target2_discrete_time)
 
         target3_orn =  dispose_orn
@@ -192,6 +191,35 @@ class iLQR():
         iter = 0
         while pos_dif > pos_threshold and iter < max_iter:
             jpos, x_pos, U, Ks, ds, pos_dif, orn_dif = self.generate_trajectory(q0, dq0, keypoints, horizon, final_pos = target1_pos_base, final_orn = target1_orn)
+            iter += 1
+            horizon = int(1.5*horizon)
+
+        return jpos, x_pos, U, Ks, ds, pos_dif, orn_dif
+    
+    def return_trajectory(self, q0, dq0, dispose_pos, dispose_orn, target_pos, target_orn_wxyz, horizon = 45,
+                           pos_threshold = 0.03, orn_threshold = 0.1, max_iter = 2):
+        Qtarget = np.diag([.5, .5, .5, 1, 1, 1])
+
+        target1_orn = dispose_orn.copy()
+        rotation1_mat_grasps = quat2mat(convert_quat(target1_orn, to="xyzw"))
+        target1_pos_base = dispose_pos.copy()
+        target1_pos_base -= rotation1_mat_grasps[:3,2] * 0.15 #rbt.get_ee_pos()[2].copy()
+        target1_discrete_time = 20 - 1
+        keypoint_1 = PosOrnKeypoint(target1_pos_base, target1_orn, Qtarget, target1_discrete_time)
+
+        target2_pos_base = target_pos.copy()
+        target2_orn = target_orn_wxyz.copy()
+        target2_discrete_time = horizon - 1
+
+        # keypoint = PosOrnKeypoint(target1_pos_base, target1_orn, Qtarget, target1_discrete_time)
+        keypoint_2 = PosOrnKeypoint(target2_pos_base, target2_orn, Qtarget, target2_discrete_time)
+
+        keypoints = [keypoint_1, keypoint_2]
+
+        pos_dif = 1000
+        iter = 0
+        while pos_dif > pos_threshold and iter < max_iter:
+            jpos, x_pos, U, Ks, ds, pos_dif, orn_dif = self.generate_trajectory(q0, dq0, keypoints, horizon, final_pos = target2_pos_base, final_orn = target2_orn)
             iter += 1
             horizon = int(1.5*horizon)
 
