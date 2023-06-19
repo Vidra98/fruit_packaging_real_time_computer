@@ -105,3 +105,25 @@ class gridRegistrator():
     
     def get_registration_time(self):
         return self.registration_time
+
+    def set_cell_occupancy(self, cell_idx, occupancy):
+        if self.disposability_grid is None:
+            print("No disposability grid received yet")
+            return False
+        else:
+            self.disposability_grid[cell_idx] = occupancy
+            return True
+        
+    def get_first_free_cell(self):
+        if self.disposability_grid is None or self.poses is None:
+            print("No grid received yet")
+            return None, None
+        self.freeCells = np.argwhere(self.disposability_grid > 0)
+        if self.freeCells.size == 0:
+            print("No free cell")
+            return None, None
+        
+        poses_reshaped = np.reshape(self.poses, np.shape(self.disposability_grid))
+        posesFree = poses_reshaped[self.freeCells[0, 0], self.freeCells[0, 1]]
+
+        return posesFree, self.freeCells[0]
