@@ -100,12 +100,12 @@ class iLQR():
 
     def grasping_trajectory(self, q0, dq0, grasps_pos_base, grasps_orn_wxyz, horizon = 120,
                            pos_threshold = 0.01, orn_threshold = 0.1, max_iter = 3):
-        Qtarget1 = np.diag([.75,  # Tracking the x position
-                            .75,  # Tracking the y position
-                            .75,  # Tracking the z position
+        Qtarget1 = np.diag([.1,  # Tracking the x position
+                            .1,  # Tracking the y position
+                            .1,  # Tracking the z position
                             1,  # Tracking orientation around x axis
                             1,  # Tracking orientation around y axis
-                            .1])  # Tracking orientation around z axis
+                            1])  # Tracking orientation around z axis
 
         rotation_mat_grasps = quat2mat(convert_quat(grasps_orn_wxyz, to="xyzw"))
         target1_pos_base = grasps_pos_base.copy()
