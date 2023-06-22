@@ -42,9 +42,9 @@ def depth2pc(depth, K, rgb=None, segmap=None, max_distance=1.2):
     """
 
     if segmap is not None:
-        mask = np.where((depth > 0) & (depth > max_distance) & (segmap > 0))
+        mask = np.where((depth > 0) & (depth < max_distance) & (segmap > 0))
     else:
-        mask = np.where((depth > 0) & (depth > max_distance))
+        mask = np.where((depth > 0) & (depth < max_distance))
 
     x,y = mask[1], mask[0]
 

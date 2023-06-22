@@ -284,7 +284,7 @@ def regularize_pc(pc, pc_colors, downsampling_method="voxel", n_points=10000, vo
         pcd.colors = o3d.utility.Vector3dVector(pc_colors)
         if outlier_filtering_method == "statistical":
             cl, ind = pcd.remove_statistical_outlier(nb_neighbors=statistical_param_arg[0], std_ratio=statistical_param_arg[1])
-        if outlier_filtering_method == "radius":
+        elif outlier_filtering_method == "radius":
             cl, ind = pcd.remove_radius_outlier(nb_points=radius_param_arg[0], radius=radius_param_arg[1])
         else:
             print("Error: method {} not implemented, please chose between [statistical, radius]".format(outlier_filtering_method))
