@@ -18,8 +18,8 @@ class RealCameraROS:
         except:
             print("rospy already initialized")
         try:
-            self.camera_info = rospy.wait_for_message("/camera/color/camera_info", CameraInfo, timeout=0.5)
-            self.depth_info = rospy.wait_for_message("/camera/aligned_depth_to_color/camera_info", CameraInfo, timeout=0.5)
+            self.camera_info = rospy.wait_for_message("/camera/color/camera_info", CameraInfo, timeout=1.5)
+            self.depth_info = rospy.wait_for_message("/camera/aligned_depth_to_color/camera_info", CameraInfo, timeout=1.5)
         except:
             print("list of found topics:")
             print(rospy.get_published_topics())
