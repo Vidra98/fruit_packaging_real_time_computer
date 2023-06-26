@@ -358,3 +358,89 @@ def correct_angle(quat_xyzw, angle_range):
         quat_xyzw = quat_multiply(quat_xyzw, rot_orn)
 
     return quat_xyzw
+
+def get_ROI_box(pc, pc_colors, depth, rgb, segmap, intrinsic, border_size = 0.05):
+
+    pc_seg, pc_colors_seg = depth2pc(depth, intrinsic, rgb, segmap=segmap)
+
+    min_bound = np.min(pc_seg, axis=0) - border_size
+    max_bound = np.max(pc_seg, axis=0) + border_size
+
+    bounding_point = np.array([[min_bound[0], min_bound[1], min_bound[2], 1],
+                            [min_bound[0], min_bound[1], max_bound[2], 1],
+                            [min_bound[0], max_bound[1], min_bound[2], 1],
+                            [min_bound[0], max_bound[1], max_bound[2], 1],
+                            [max_bound[0], min_bound[1], min_bound[2], 1],
+                            [max_bound[0], min_bound[1], max_bound[2], 1],
+                            [max_bound[0], max_bound[1], min_bound[2], 1],
+                            [max_bound[0], max_bound[1], max_bound[2], 1]])
+    #crop point cloud
+    ROI_mask = np.array((pc[:,0] > min_bound[0]) & (pc[:,0] < max_bound[0]) &
+                    (pc[:,1] > min_bound[1]) & (pc[:,1] < max_bound[1]) &
+                    (pc[:,2] > min_bound[2]) & (pc[:,2] < max_bound[2]))
+
+    pc_ROI = pc[ROI_mask]
+    pc_colors_ROI = pc_colors[ROI_mask]
+
+    return pc_ROI, pc_colors_ROI, bounding_point
+
+def project_pc(pc, pc_colors, intrinsic, extrinsic, image_size=(720, 1280)):
+    pc = np.concatenate((pc, np.ones((pc.shape[0], 1))), axis=1)
+
+    T = np.eye(4)
+    #invert transformation
+    T[:3, 3] = -extrinsic[:3, :3].T @ extrinsic[:3, 3]
+    T[:3, :3] = extrinsic[:3, :3].T
+    #apply transformation
+                    
+    pc = T @ pc.T
+    uv = intrinsic @ pc[:3, :]
+    uv = uv / uv[2, :]
+    uv = uv[:2, :].T
+    uv = np.round(uv).astype(np.int32)
+
+    #select point in image
+    mask = (uv[:, 0] >= 0) & (uv[:, 0] < image_size[1]) & (uv[:, 1] >= 0) & (uv[:, 1] < image_size[0])
+    image = np.zeros((image_size[0], image_size[1], 3), dtype=np.uint8)
+
+    #draw points on image
+    image[uv[mask, 1], uv[mask, 0]] = pc_colors[mask][:, [0, 1, 2]]
+
+    #draw circle on image
+    for i in range(uv.shape[0]):
+        if mask[i]:
+            cv2.circle(image, (uv[i, 0], uv[i, 1]), round(max(image_size)/200), pc_colors[i], -1)
+
+    return image
+
+def apply_ROI_box_mask(image, bounding_point, intrinsic, extrinsic, image_size=(720, 1280)):
+    T = np.eye(4)
+    #invert transformation
+    T[:3, 3] = -extrinsic[:3, :3].T @ extrinsic[:3, 3]
+    T[:3, :3] = extrinsic[:3, :3].T
+
+    #apply transformation
+    bounding_point_uv = T @ bounding_point.T
+    bounding_point_uv = intrinsic @ bounding_point_uv[:3, :]
+    bounding_point_uv = bounding_point_uv / bounding_point_uv[2, :]
+    bounding_point_uv = bounding_point_uv[:2, :].T
+    bounding_point_uv = bounding_point_uv.astype(np.int32)
+    mask_bounding = (bounding_point_uv[:, 0] >= 0) & (bounding_point_uv[:, 0] < image_size[1]) & (bounding_point_uv[:, 1] >= 0) & (bounding_point_uv[:, 1] < image_size[0])
+    max_bound = np.max(bounding_point_uv, axis=0)
+    min_bound = np.min(bounding_point_uv, axis=0)
+    print(min_bound, max_bound)
+    if min_bound[0] < 0:
+        min_bound[0] = 0
+    if min_bound[1] < 0:
+        min_bound[1] = 0
+    if max_bound[0] < 0:
+        max_bound[0] = 0
+    if max_bound[1] < 0:
+        max_bound[1] = 0
+    print(min_bound, max_bound)
+    mask_bounding_ROI = np.ones_like(image)
+    mask_bounding_ROI[min_bound[1]:max_bound[1], min_bound[0]:max_bound[0]] = 0
+
+    image[mask_bounding_ROI.astype(np.bool)] = 255
+
+    return image
