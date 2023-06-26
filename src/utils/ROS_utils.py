@@ -59,8 +59,10 @@ def get_camera_pose(rbt, ee_depth=-0.1034):
     ee_pose[:3,:3] = quat2mat(convert_quat(rbt.model.ee_orn_rel(), to="xyzw")) #xyzw
     ee_pose[:3,3] = rbt.model.ee_pos_rel() 
 
-    ee2hand = np.eye(4)
-    ee2hand[2,3] = ee_depth
+    # image are retrieved in camera_optical_frame reference, so we need to add a transformation from camera_optical_frame to camera_link
+    # This rotation added to the panda hand rotation gives the identity matrix.
+    ee2flange = np.eye(4)
+    ee2flange[2,3] = ee_depth
 
     with open('config/camera_calibration.json') as json_file:
         camera_calibration = json.load(json_file)
@@ -77,11 +79,11 @@ def get_camera_pose(rbt, ee_depth=-0.1034):
 
     hand2camera_mat = Rotation.from_quat(hand2camera_quat).as_matrix()
 
-    hand2camera = np.eye(4)
-    hand2camera[:3,:3] = hand2camera_mat
-    hand2camera[:3,3] = hand2camera_pos
+    flange2camera = np.eye(4)
+    flange2camera[:3,:3] = hand2camera_mat
+    flange2camera[:3,3] = hand2camera_pos
 
-    current_pose = ee_pose @ ee2hand @ hand2camera
+    current_pose = ee_pose @ ee2flange @ flange2camera
 
     return current_pose
 

@@ -138,7 +138,7 @@ class RealCamera:
             self._profile = self._pipeline.get_active_profile()
             sensor = self._profile.get_device().query_sensors()[0]        # Getting the depth sensor's depth scale (see rs-align example for explanation)
             sensor.set_option(rs.option.min_distance, 0)
-            sensor.set_option(rs.option.enable_max_usable_range, 2)
+            #sensor.set_option(rs.option.enable_max_usable_range, 2)
 
     def stop(self):
         self._pipeline.stop()
