@@ -92,14 +92,14 @@ class iLQR():
             pos_dif = np.linalg.norm(pos_dif)
             orn_dif = quat_distance(final_orn, x_pos[-1, 3:])
             if pos_dif > 0.01:
-                print("WARNING: final position not reached, position difference is {}".format(pos_dif))
+                print("WARNING: final position not reached at horizon {}, position difference is {}".format(horizon, pos_dif))
 
             return jpos, x_pos, U, Ks, ds, pos_dif, orn_dif
         
         return jpos, x_pos, U, Ks, ds
 
     def grasping_trajectory(self, q0, dq0, grasps_pos_base, grasps_orn_wxyz, horizon = 120,
-                           pos_threshold = 0.01, orn_threshold = 0.1, max_iter = 3):
+                           pos_threshold = 0.01, orn_threshold = 0.1, max_iter = 4):
         Qtarget1 = np.diag([.1,  # Tracking the x position
                             .1,  # Tracking the y position
                             .1,  # Tracking the z position
@@ -108,27 +108,27 @@ class iLQR():
                             1])  # Tracking orientation around z axis
 
         rotation_mat_grasps = quat2mat(convert_quat(grasps_orn_wxyz, to="xyzw"))
-        target1_pos_base = grasps_pos_base.copy()
-        target1_pos_base -= rotation_mat_grasps[:3,2] * 0.1 #rbt.get_ee_pos()[2].copy()
-        #target1_pos_base[2] += 0.1
-        target1_orn = grasps_orn_wxyz.copy()
-
-        target2_pos_base = grasps_pos_base.copy()
-        target2_orn = grasps_orn_wxyz.copy()
-
-        target1_discrete_time = horizon-30 - 1
-        keypoint_1 = PosOrnKeypoint(target1_pos_base, target1_orn, Qtarget1, target1_discrete_time)
-
-        Qtarget2 = np.diag([.51, .51, .51, 1, 1, 1])
-        target2_discrete_time = horizon - 1
-        keypoint_2 = PosOrnKeypoint(target2_pos_base, target2_orn, Qtarget2, target2_discrete_time)
-
-        keypoints = [keypoint_1, keypoint_2]
-        #keypoints = [keypoint_1]
-
         pos_dif = 1000
         iter = 0
         while pos_dif > pos_threshold and iter < max_iter:
+            target1_pos_base = grasps_pos_base.copy()
+            target1_pos_base -= rotation_mat_grasps[:3,2] * 0.1 #rbt.get_ee_pos()[2].copy()
+            target1_orn = grasps_orn_wxyz.copy()
+
+            target2_pos_base = grasps_pos_base.copy()
+            target2_orn = grasps_orn_wxyz.copy()
+
+            target1_discrete_time = horizon-30 - 1
+            keypoint_1 = PosOrnKeypoint(target1_pos_base, target1_orn, Qtarget1, target1_discrete_time)
+
+            Qtarget2 = np.diag([.51, .51, .51, 1, 1, 1])
+            target2_discrete_time = horizon - 1
+            keypoint_2 = PosOrnKeypoint(target2_pos_base, target2_orn, Qtarget2, target2_discrete_time)
+
+            keypoints = [keypoint_1, keypoint_2]
+            #keypoints = [keypoint_1]
+
+            print("new grasp horizon :", horizon)
             jpos, x_pos, U, Ks, ds, pos_dif, orn_dif = self.generate_trajectory(q0, dq0, keypoints, horizon, final_pos = target2_pos_base, final_orn = target2_orn)
             iter += 1
             horizon = int(1.5*horizon)
@@ -136,40 +136,41 @@ class iLQR():
         return jpos, x_pos, U, Ks, ds, pos_dif, orn_dif
     
     def dispose_trajectory(self, q0, dq0, grasp_pos, grasp_orn, dispose_pos, dispose_orn, horizon = 120,
-                           pos_threshold = 0.03, orn_threshold = 0.1, max_iter = 3):
+                           pos_threshold = 0.02, orn_threshold = 0.1, max_iter = 2):
         """ 
         dispose quat (wxyz)
         """
-        Qtarget1 = np.diag([.2, .2, 1, .7, .7, .7])
+        Qtarget1 = np.diag([.7, .7, 1, .7, .7, .7])
         Qtarget2 = np.diag([.5, .5, 1, .1, .1, .1])
-        Qtarget3 = np.diag([1, 1, 1, 0.71, .71, .71])
+        Qtarget3 = np.diag([1, 1, 1, 0.5, .5, .5])
 
         target1_orn = grasp_orn.copy()
         rotation1_mat_grasps = quat2mat(convert_quat(target1_orn, to="xyzw"))
         target1_pos_base = grasp_pos.copy()
         target1_pos_base -= rotation1_mat_grasps[:3,2] * 0.15 #rbt.get_ee_pos()[2].copy()
-        target1_discrete_time = 20 - 1
-        keypoint_1 = PosOrnKeypoint(target1_pos_base, target1_orn, Qtarget1, target1_discrete_time)
 
         target2_orn =  dispose_orn
         rotation2_mat_grasps = quat2mat(convert_quat(target2_orn, to="xyzw"))
         target2_pos_base = dispose_pos.copy()
         target2_pos_base -= rotation2_mat_grasps[:3,2] * 0.15 #rbt.get_ee_pos()[2].copy()
-        target2_discrete_time = horizon - 15 - 1
-        keypoint_2 = PosOrnKeypoint(target2_pos_base, target2_orn, Qtarget2, target2_discrete_time)
 
         target3_orn =  dispose_orn
         target3_pos_base = dispose_pos
-        target3_discrete_time = horizon - 1
-        keypoint_3 = PosOrnKeypoint(target3_pos_base, target3_orn, Qtarget3, target3_discrete_time)        
-
-        keypoints = [keypoint_1, keypoint_2, keypoint_3]
 
         pos_dif = 1000
         iter = 0
         while pos_dif > pos_threshold and iter < max_iter:
-            print(pos_dif)
-            jpos, x_pos, U, Ks, ds, pos_dif, orn_dif = self.generate_trajectory(q0, dq0, keypoints, horizon, cmd_penalties = 1e-3, final_pos = target3_pos_base, final_orn = target3_orn)
+            target1_discrete_time = 20 - 1
+            target2_discrete_time = horizon - 35 - 1
+            target3_discrete_time = horizon - 1
+            keypoint_1 = PosOrnKeypoint(target1_pos_base, target1_orn, Qtarget1, target1_discrete_time)
+            keypoint_2 = PosOrnKeypoint(target2_pos_base, target2_orn, Qtarget2, target2_discrete_time)
+            keypoint_3 = PosOrnKeypoint(target3_pos_base, target3_orn, Qtarget3, target3_discrete_time)        
+
+            keypoints = [keypoint_1, keypoint_2, keypoint_3]
+
+            print("new dispose horizon :", horizon)
+            jpos, x_pos, U, Ks, ds, pos_dif, orn_dif = self.generate_trajectory(q0, dq0, keypoints, horizon, cmd_penalties = 1e-3, final_pos = dispose_pos, final_orn = dispose_orn)
             iter += 1
             horizon = int(1.5*horizon)
 

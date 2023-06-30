@@ -79,11 +79,13 @@ def get_camera_pose(rbt, ee_depth=-0.1034):
 
     hand2camera_mat = Rotation.from_quat(hand2camera_quat).as_matrix()
 
-    flange2camera = np.eye(4)
-    flange2camera[:3,:3] = hand2camera_mat
-    flange2camera[:3,3] = hand2camera_pos
+    flange2cameraLink = np.eye(4)
+    flange2cameraLink[:3,:3] = hand2camera_mat
+    flange2cameraLink[:3,3] = hand2camera_pos
 
-    current_pose = ee_pose @ ee2flange @ flange2camera
+
+
+    current_pose = ee_pose @ ee2flange @ flange2cameraLink
 
     return current_pose
 
@@ -103,7 +105,7 @@ class gridRegistrator():
         self.poses = poseArray.poses
         self.disposability_grid = self.bridge.imgmsg_to_cv2(disposability_grid_msg, "mono8")
         self.registration_time = time.time()
-        self.acq_pos = get_camera_pose(self.rbt, ee_depth=-0.1150)
+        self.acq_pos = get_camera_pose(self.rbt, ee_depth=-0.10340)
 
     def get_acq_pos(self):
         return self.acq_pos
@@ -116,6 +118,12 @@ class gridRegistrator():
     
     def get_registration_time(self):
         return self.registration_time
+    
+    def reset(self):
+        self.poses = None
+        self.disposability_grid = None
+        self.registration_time = None
+        self.acq_pos = None
     
     def clear_grid(self):
         self.disposability_grid = np.ones_like(self.disposability_grid) * 255
