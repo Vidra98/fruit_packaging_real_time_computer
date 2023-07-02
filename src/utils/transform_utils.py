@@ -1,6 +1,7 @@
 import numpy as np
 import open3d as o3d
 from scipy.spatial.transform import Rotation
+import cv2
 
 def poseCam2World(pos, orn, reference_pose):
     """ Convert pose from camera frame to world frame
@@ -215,7 +216,7 @@ def mat2quat(rmat):
     inds = np.array([1, 2, 3, 0])
     return q1[inds]
 
-def depth2pc(depth, K, rgb=None):
+def depth2pc(depth, K, rgb=None, segmap=None, max_distance=1.2):
     """
     Convert depth and intrinsics to point cloud and optionally point cloud color
     :param depth: hxw depth map in m
@@ -223,7 +224,11 @@ def depth2pc(depth, K, rgb=None):
     :returns: (Nx3 point cloud, point cloud color)
     """
 
-    mask = np.where(depth > 0)
+    if segmap is not None:
+        mask = np.where((depth > 0) & (depth < max_distance) & (segmap > 0))
+    else:
+        mask = np.where((depth > 0) & (depth < max_distance))
+
     x,y = mask[1], mask[0]
 
     normalized_x = (x.astype(np.float32) - K[0,2])

@@ -5,6 +5,7 @@ from .mesh_utils import create_gripper
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from tqdm import tqdm
+import open3d as o3d
 
 def segmentation_to_rgb(seg_im):
     """
@@ -32,34 +33,6 @@ def show_camera_view(rgb, depth, segmap=None):
     cv2.imshow("depth", (255*(depth-depth.min()) /
                 depth.max()).astype(np.uint8))
     cv2.waitKey(25)
-
-def depth2pc(depth, K, rgb=None, segmap=None, max_distance=1.2):
-    """
-    Convert depth and intrinsics to point cloud and optionally point cloud color
-    :param depth: hxw depth map in m
-    :param K: 3x3 Camera Matrix with intrinsics
-    :returns: (Nx3 point cloud, point cloud color)
-    """
-
-    if segmap is not None:
-        mask = np.where((depth > 0) & (depth < max_distance) & (segmap > 0))
-    else:
-        mask = np.where((depth > 0) & (depth < max_distance))
-
-    x,y = mask[1], mask[0]
-
-    normalized_x = (x.astype(np.float32) - K[0,2])
-    normalized_y = (y.astype(np.float32) - K[1,2])
-
-    world_x = normalized_x * depth[y, x] / K[0,0]
-    world_y = normalized_y * depth[y, x] / K[1,1]
-    world_z = depth[y, x]
-
-    if rgb is not None:
-        rgb = rgb[y,x,:]
-
-    pc = np.vstack((world_x, world_y, world_z)).T
-    return (pc, rgb)
 
 def extract_point_clouds(depth, K, segmap=None, rgb=None, z_range=[0.2,1.8], segmap_id=0, skip_border_objects=False, margin_px=5):
     """
@@ -281,3 +254,55 @@ def visualize_grasps(full_pc, pred_grasps_cam, plot_opencv_cam=True, pc_colors=N
     mlab.view(azimuth=180, elevation=180, distance=1)
     # mlab.savefig('pred_grasps.png')
     mlab.show(stop=True)
+
+def draw_triangle(dim=0.1, color=[1, 0, 0]):
+    halfdim=dim/2
+    points = [
+        [0, 0, 0],
+        [-halfdim, -halfdim, dim],
+        [halfdim, -halfdim, dim],
+        [halfdim, halfdim, dim],
+        [-halfdim, halfdim, dim],
+
+    ]
+    lines = [
+        [0, 1],
+        [0, 2],
+        [0, 3],
+        [0, 4],
+        [1, 2],
+        [2, 3],
+        [3, 4],
+        [4, 1],
+
+    ]
+    colors = [color for i in range(len(lines))]
+    line_set = o3d.geometry.LineSet(
+        points=o3d.utility.Vector3dVector(points),
+        lines=o3d.utility.Vector2iVector(lines),
+    )
+    line_set.colors = o3d.utility.Vector3dVector(colors)
+    return line_set
+
+def draw_box(points):
+    lines = [
+        [0, 1],
+        [0, 2],
+        [1, 3],
+        [2, 3],
+        [4, 5],
+        [4, 6],
+        [5, 7],
+        [6, 7],
+        [0, 4],
+        [1, 5],
+        [2, 6],
+        [3, 7],
+    ]
+    colors = [[1, 0, 0] for i in range(len(lines))]
+    line_set = o3d.geometry.LineSet(
+        points=o3d.utility.Vector3dVector(points),
+        lines=o3d.utility.Vector2iVector(lines),
+    )
+    line_set.colors = o3d.utility.Vector3dVector(colors)
+    return line_set
