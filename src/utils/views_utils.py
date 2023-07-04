@@ -40,6 +40,8 @@ def project_pc(pc, pc_colors, intrinsic, extrinsic, image_size=(720, 1280)):
 
 def get_ROI_box(pc, pc_colors, depth, rgb, segmap, intrinsic, extrinsic, border_size = 0.05):
 
+    if np.all(segmap==0):
+        return [], [], None
     pc_seg, pc_colors_seg = depth2pc(depth, intrinsic, rgb, segmap=segmap)
     pc_seg = extrinsic @ np.concatenate((pc_seg, np.ones((pc_seg.shape[0], 1))), axis=1).T
     pc_seg = pc_seg.T[:, :3]    
@@ -95,7 +97,7 @@ def apply_ROI_box_mask(image, bounding_point, intrinsic, extrinsic, image_size=(
 
     return image
 
-def compute_views_scores(views, pc_fused, pc_colors_fused, intrinsic, bounding_point, image_size=(720, 1280), verbose=False):
+def compute_views_scores(views, pc_fused, pc_colors_fused, intrinsic, bounding_point, image_size=(720, 1280), verbose=False, show=False):
     # compte views score
     next_view = None
     viewBestScore = 0
@@ -115,6 +117,12 @@ def compute_views_scores(views, pc_fused, pc_colors_fused, intrinsic, bounding_p
             viewBestScore = score
             next_view = view_key
         times.append(time.time() - start)
+        if show:
+            cv2.imshow("{}".format(view_key), image)
+    
+    if show:
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
     if verbose:
         print("average inference time ", np.mean(times))
         print("best_score is ", viewBestScore)

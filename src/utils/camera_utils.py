@@ -65,7 +65,7 @@ class RealCameraROS:
         return cv2.applyColorMap(cv2.convertScaleAbs(depth_image.copy(), alpha=0.03), cv2.COLORMAP_JET)
 
     def getIntrinsic(self):
-        return np.array(self.camera_info.K).reshape((3,3)), np.array(self.depth_info.D)
+        return np.array(self.camera_info.K).reshape((3,3)), np.array(self.camera_info.D)
     
     def get_pointcloud(self):
         """Get the pointcloud from the camera convert the data to xyz and rgb format

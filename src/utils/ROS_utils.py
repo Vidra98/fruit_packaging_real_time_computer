@@ -55,9 +55,9 @@ def run_action(rbt, actions, control_freq, eef_pos=None, eef_quat=None, segmenta
 def get_camera_pose(rbt, ee_depth=-0.1034):
     """ Get camera pose in robot base frame
     """
-    ee_pose = np.eye(4)
-    ee_pose[:3,:3] = quat2mat(convert_quat(rbt.model.ee_orn_rel(), to="xyzw")) #xyzw
-    ee_pose[:3,3] = rbt.model.ee_pos_rel() 
+    world2ee_pose = np.eye(4)
+    world2ee_pose[:3,:3] = quat2mat(convert_quat(rbt.model.ee_orn_rel(), to="xyzw")) #xyzw
+    world2ee_pose[:3,3] = rbt.model.ee_pos_rel() 
 
     # image are retrieved in camera_optical_frame reference, so we need to add a transformation from camera_optical_frame to camera_link
     # This rotation added to the panda hand rotation gives the identity matrix.
@@ -79,13 +79,11 @@ def get_camera_pose(rbt, ee_depth=-0.1034):
 
     hand2camera_mat = Rotation.from_quat(hand2camera_quat).as_matrix()
 
-    flange2cameraLink = np.eye(4)
-    flange2cameraLink[:3,:3] = hand2camera_mat
-    flange2cameraLink[:3,3] = hand2camera_pos
+    flange2opticalFrame = np.eye(4)
+    flange2opticalFrame[:3,:3] = hand2camera_mat
+    flange2opticalFrame[:3,3] = hand2camera_pos
 
-
-
-    current_pose = ee_pose @ ee2flange @ flange2cameraLink
+    current_pose = world2ee_pose @ ee2flange @ flange2opticalFrame
 
     return current_pose
 
@@ -97,7 +95,9 @@ class gridRegistrator():
         self.registration_time = None
         #rbt object, use to get pos of ee when grid is received
         self.rbt = rbt 
+        self.acq_matrix = None
         self.acq_pos = None
+        self.acq_orn_wxyz = None
 
     def callback(self, poseArray, disposability_grid_msg):
         if abs(np.sum(self.rbt.dq)) > 0.005:
@@ -105,10 +105,12 @@ class gridRegistrator():
         self.poses = poseArray.poses
         self.disposability_grid = self.bridge.imgmsg_to_cv2(disposability_grid_msg, "mono8")
         self.registration_time = time.time()
-        self.acq_pos = get_camera_pose(self.rbt, ee_depth=-0.10340)
+        self.acq_matrix = get_camera_pose(self.rbt, ee_depth=-0.10340)
+        self.acq_pos =  self.rbt.model.ee_pos_rel()
+        self.acq_orn_wxyz = self.rbt.model.ee_orn_rel()
 
-    def get_acq_pos(self):
-        return self.acq_pos
+    def get_acq_coord(self):
+        return self.acq_matrix, self.acq_pos, self.acq_orn_wxyz
 
     def get_poses(self):
         return self.poses
@@ -123,7 +125,7 @@ class gridRegistrator():
         self.poses = None
         self.disposability_grid = None
         self.registration_time = None
-        self.acq_pos = None
+        self.acq_matrix = None
     
     def clear_grid(self):
         self.disposability_grid = np.ones_like(self.disposability_grid) * 255
@@ -150,5 +152,5 @@ class gridRegistrator():
         poses_reshaped = np.reshape(self.poses, np.shape(self.disposability_grid))
         poseFree = poses_reshaped[self.freeCells[0, 0], self.freeCells[0, 1]]
         posFree = poseFree.position
-        posFree_np = self.acq_pos @ np.array([posFree.x, posFree.y, posFree.z, 1])
+        posFree_np = self.acq_matrix @ np.array([posFree.x, posFree.y, posFree.z, 1])
         return posFree_np[:3], (self.freeCells[0, 0], self.freeCells[0, 1])

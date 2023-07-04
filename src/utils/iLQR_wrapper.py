@@ -29,13 +29,11 @@ class iLQR():
         dq0 = [0]*rbt.dq
 
         # ##This is min and max value
-        # self._qMax = np.array([2.87,   1.75,  2.8973, -0.05,  2.8973,  3.75,   2.8973])
-        # self._qMin = np.array([-2.87, -1.75, -2.8973, -3.05, -2.8973, -0.015, -2.8973])
+        self._qMax = np.array([2.7,   1.15,  1.1, 0.05,  2.7,  3.6,   2.7])
+        self._qMin = np.array([-2.7, -0.4, -1.1, -2.8, -2.7, -0.005, -2.7])
 
-        # self._qMax = np.array([1.68,   1.3,  1.6, -1,  0.2,  2.8,   2.65])
-        # self._qMin = np.array([-0.15, -0.04, -1, -2.6, -0.9, 0.9, -2.65])
-        self._qMax = np.array([1.68,   1.6,  2.65, 0.05,  2.65,  3.5,   2.65])
-        self._qMin = np.array([-0.4, -1.6, -2.65, -2.95, -2.65, 0.05, -2.65])
+        # self._qMax = np.array([2.7,   1.15,  2.7, 0.05,  2.7,  3.6,   2.7])
+        # self._qMin = np.array([-2.7, -0.4, -2.7, -2.8, -2.7, -0.005, -2.7])
         # self._dqMax = np.array([2., 2., 2., 2., 2.6, 2.6, 2.6])
         self._dqMax = np.array([.5, .5, .5, .5, .6, .6, .6])
 
@@ -98,15 +96,17 @@ class iLQR():
         
         return jpos, x_pos, U, Ks, ds
 
-    def grasping_trajectory(self, q0, dq0, grasps_pos_base, grasps_orn_wxyz, horizon = 120,
-                           pos_threshold = 0.01, orn_threshold = 0.1, max_iter = 4):
-        Qtarget1 = np.diag([.1,  # Tracking the x position
-                            .1,  # Tracking the y position
+    def grasping_trajectory(self, q0, dq0, grasps_pos_base, grasps_orn_wxyz, horizon = [60, 120],
+                           pos_threshold = 0.01, orn_threshold = 0.1, max_iter = 4, cmd_penalties=1e-5):
+        Qtarget1 = np.diag([1,  # Tracking the x position
+                            1,  # Tracking the y position
                             .1,  # Tracking the z position
                             1,  # Tracking orientation around x axis
                             1,  # Tracking orientation around y axis
                             1])  # Tracking orientation around z axis
 
+        if type(horizon) == list:
+            horizon = np.array(horizon)
         rotation_mat_grasps = quat2mat(convert_quat(grasps_orn_wxyz, to="xyzw"))
         pos_dif = 1000
         iter = 0
@@ -118,51 +118,54 @@ class iLQR():
             target2_pos_base = grasps_pos_base.copy()
             target2_orn = grasps_orn_wxyz.copy()
 
-            target1_discrete_time = horizon-30 - 1
+            target1_discrete_time = horizon[0] - 1
             keypoint_1 = PosOrnKeypoint(target1_pos_base, target1_orn, Qtarget1, target1_discrete_time)
 
-            Qtarget2 = np.diag([.51, .51, .51, 1, 1, 1])
-            target2_discrete_time = horizon - 1
+            Qtarget2 = np.diag([1, 1, 1, .5, .5, .5])
+            target2_discrete_time = horizon[1] - 1
             keypoint_2 = PosOrnKeypoint(target2_pos_base, target2_orn, Qtarget2, target2_discrete_time)
 
             keypoints = [keypoint_1, keypoint_2]
             #keypoints = [keypoint_1]
 
             print("new grasp horizon :", horizon)
-            jpos, x_pos, U, Ks, ds, pos_dif, orn_dif = self.generate_trajectory(q0, dq0, keypoints, horizon, final_pos = target2_pos_base, final_orn = target2_orn)
+            jpos, x_pos, U, Ks, ds, pos_dif, orn_dif = self.generate_trajectory(q0, dq0, keypoints, horizon[-1], final_pos = target2_pos_base, final_orn = target2_orn)
             iter += 1
-            horizon = int(1.5*horizon)
+            horizon = (1.5*horizon).astype(int)
 
         return jpos, x_pos, U, Ks, ds, pos_dif, orn_dif
     
-    def dispose_trajectory(self, q0, dq0, grasp_pos, grasp_orn, dispose_pos, dispose_orn, horizon = 120,
-                           pos_threshold = 0.02, orn_threshold = 0.1, max_iter = 2):
+    def dispose_trajectory(self, q0, dq0, grasp_pos, grasp_orn, dispose_pos, dispose_orn, horizon = [30, 70, 100],
+                           pos_threshold = 0.02, orn_threshold = 0.1, max_iter = 3, cmd_penalties=1e-3):
         """ 
         dispose quat (wxyz)
         """
         Qtarget1 = np.diag([.7, .7, 1, .7, .7, .7])
-        Qtarget2 = np.diag([.5, .5, 1, .1, .1, .1])
+        Qtarget2 = np.diag([1, 1, 1, .1, .1, .1])
         Qtarget3 = np.diag([1, 1, 1, 0.5, .5, .5])
 
         target1_orn = grasp_orn.copy()
         rotation1_mat_grasps = quat2mat(convert_quat(target1_orn, to="xyzw"))
         target1_pos_base = grasp_pos.copy()
-        target1_pos_base -= rotation1_mat_grasps[:3,2] * 0.15 #rbt.get_ee_pos()[2].copy()
+        target1_pos_base -= rotation1_mat_grasps[:3,2] * 0.30 #rbt.get_ee_pos()[2].copy()
 
         target2_orn =  dispose_orn
         rotation2_mat_grasps = quat2mat(convert_quat(target2_orn, to="xyzw"))
         target2_pos_base = dispose_pos.copy()
-        target2_pos_base -= rotation2_mat_grasps[:3,2] * 0.15 #rbt.get_ee_pos()[2].copy()
+        target2_pos_base -= rotation2_mat_grasps[:3,2] * 0.1 #rbt.get_ee_pos()[2].copy()
 
         target3_orn =  dispose_orn
         target3_pos_base = dispose_pos
 
+        if type(horizon) == list:
+            horizon = np.array(horizon)
+
         pos_dif = 1000
         iter = 0
         while pos_dif > pos_threshold and iter < max_iter:
-            target1_discrete_time = 20 - 1
-            target2_discrete_time = horizon - 35 - 1
-            target3_discrete_time = horizon - 1
+            target1_discrete_time = horizon[0] - 1
+            target2_discrete_time = horizon[1] - 1
+            target3_discrete_time = horizon[2] - 1
             keypoint_1 = PosOrnKeypoint(target1_pos_base, target1_orn, Qtarget1, target1_discrete_time)
             keypoint_2 = PosOrnKeypoint(target2_pos_base, target2_orn, Qtarget2, target2_discrete_time)
             keypoint_3 = PosOrnKeypoint(target3_pos_base, target3_orn, Qtarget3, target3_discrete_time)        
@@ -170,14 +173,14 @@ class iLQR():
             keypoints = [keypoint_1, keypoint_2, keypoint_3]
 
             print("new dispose horizon :", horizon)
-            jpos, x_pos, U, Ks, ds, pos_dif, orn_dif = self.generate_trajectory(q0, dq0, keypoints, horizon, cmd_penalties = 1e-3, final_pos = dispose_pos, final_orn = dispose_orn)
+            jpos, x_pos, U, Ks, ds, pos_dif, orn_dif = self.generate_trajectory(q0, dq0, keypoints, horizon[-1], cmd_penalties = cmd_penalties, final_pos = dispose_pos, final_orn = dispose_orn)
             iter += 1
-            horizon = int(1.5*horizon)
+            horizon = (1.5*horizon).astype(int)
 
         return jpos, x_pos, U, Ks, ds, pos_dif, orn_dif
     
     def direct_trajectory(self, q0, dq0, target_pos, target_orn_wxyz, horizon = 45,
-                           pos_threshold = 0.03, orn_threshold = 0.1, max_iter = 2):
+                           pos_threshold = 0.03, orn_threshold = 0.1, max_iter = 2, cmd_penalties=1e-5):
         Qtarget1 = np.diag([.5, .5, .5, 1, 1, 1])
 
         target1_pos_base = target_pos.copy()
