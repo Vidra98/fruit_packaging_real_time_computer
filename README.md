@@ -26,10 +26,10 @@ Here is a tuto to set the communication :
 
 And one to show how to communicate between machine (http://wiki.ros.org/ROS/Tutorials/MultipleMachines). Basically, you will need to change your ROS master to the one the computer A. 
 
-"""
+```
 export ROS_MASTER_URI=[Master IP address]:11311
 export ROS_IP=[Slave IP address]
-"""
+```
 
 # Package Libraries
 The following package libraries are required for running the packaging code:
@@ -49,9 +49,9 @@ Make sure these libraries are installed on your system.
 1. Turn on Machine A and the robot.
 2. Go to the robot IP address on a browser, unlock it and activate FCL
 Use the robot launch file:
-"""
+```
 roslaunch :HEYYYYYYYYYYYYYYYYYYYYYYY don't forget to add the command
-"""
+```
 
 ## Register Viewpoint
 1. Set up the cameras and sensors on Machine A to capture the viewpoint using "register_viewpoint.ipynb".
