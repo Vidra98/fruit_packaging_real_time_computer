@@ -87,6 +87,15 @@ def get_camera_pose(rbt, ee_depth=-0.1034):
 
     return current_pose
 
+def restart_controller(rbt, homing=False):
+    eef_pos, eef_quat = [], []
+    rbt.stop_controller()
+    rbt.error_recovery()
+    rbt.switch_controller("joint_velocity_controller")
+    if homing:
+        rbt.gripper.homing()
+    print(rbt.running_controllers)
+
 class gridRegistrator():
     def __init__(self, rbt):
         self.bridge = CvBridge()

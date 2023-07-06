@@ -1,0 +1,6 @@
+numpy
+cv2
+tqdm
+scipy
+rospy
+open3d
