@@ -1,3 +1,9 @@
+# Overview
+
+This project goal is to package random fruit and vegetables from bulk. You can see more details in the report ! :)
+
+![](assets/apple_demo.gif)
+
 # Installation
 
 ## Prerequisites
@@ -6,6 +12,9 @@
 - Machine B: Install yolov8_seg_ros and CONTACT_GRASP_ROS
 
 ## Install ROS on both machine:
+
+Pleas follow this tutorial: http://wiki.ros.org/noetic/Installation
+
 ## Install PyLQR, PyPanda, and RLI-camera on Machine A
 Follow the steps of these differents repository:
 
