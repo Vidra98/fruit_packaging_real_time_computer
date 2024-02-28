@@ -1,7 +1,6 @@
 # Overview
 
-This project goal is to package random fruit and vegetables from bulk. You can see more details in the report ! :)
-
+This project focuses on automating the packaging process of assorted fruits and vegetables using real-time computer vision techniques. Leveraging the power of ROS (Robot Operating System), the application orchestrates a robotic arm to sort and package items efficiently. Key components include contact-grasp for robust grasping strategies, yolov8 for accurate object detection, and mujoco for simulation and physical interaction modeling.
 ![](assets/apple_demo.gif)
 
 # Installation
@@ -57,14 +56,16 @@ Make sure these libraries are installed on your system.
 ## Launch Robot and Specify Number of Cells
 1. Turn on Machine A and the robot.
 2. Go to the robot IP address on a browser, unlock it and activate FCL
-Use the robot launch file:
-```
-roslaunch :HEYYYYYYYYYYYYYYYYYYYYYYY don't forget to add the command
-```
 
 ## Register Viewpoint
 1. Set up the cameras and sensors on Machine A to capture the viewpoint using "register_viewpoint.ipynb".
 2. Register the viewpoint using the provided script or notebook. Make sure to provide the necessary inputs for the viewpoint registration.
+
+# acknowledgement 
+
+YOLOv8: Utilized for real-time object detection and classification.
+Contact-Grasp: Enhances the robotic arm's ability to grasp diverse objects securely.
+MuJoCo: A physics engine for simulation and model-based control, aiding in the development and testing phases.
 
 ## Script Execution or Notebook Launch
 You have two options for executing the code: running the provided script or launching the notebook.
